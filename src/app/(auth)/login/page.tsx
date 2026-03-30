@@ -1,0 +1,98 @@
+"use client";
+
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useLogin } from "@/hooks/auth/useLogin";
+
+const loginSchema = z.object({
+  email: z.string().email("E-mail inválido"),
+  password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
+});
+
+type LoginForm = z.infer<typeof loginSchema>;
+
+export default function LoginPage() {
+  const router = useRouter();
+  const { mutate: login, isPending, error } = useLogin();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  const onSubmit = (data: LoginForm) => {
+    login(data, {
+      onSuccess: () => {
+        // Redireciona de forma absoluta forçando o navegador a carregar o layout completo
+        window.location.href = "/";
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2 text-center">
+        <h1 className="text-2xl font-bold tracking-tight">Entrar</h1>
+        <p className="text-sm text-muted-foreground">
+          Digite suas credenciais para acessar o sistema
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <div className="space-y-2">
+          <Label htmlFor="email">E-mail</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="seu@email.com"
+            {...register("email")}
+            disabled={isPending}
+          />
+          {errors.email && (
+            <p className="text-sm text-destructive">{errors.email.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="password">Senha</Label>
+          <Input
+            id="password"
+            type="password"
+            {...register("password")}
+            disabled={isPending}
+          />
+          {errors.password && (
+            <p className="text-sm text-destructive">{errors.password.message}</p>
+          )}
+        </div>
+
+        {error && (
+          <p className="text-sm text-destructive text-center">
+            {error.message || "Erro ao fazer login"}
+          </p>
+        )}
+
+        <Button type="submit" className="w-full" disabled={isPending}>
+          {isPending ? "Entrando..." : "Entrar"}
+        </Button>
+      </form>
+
+      <div className="text-center text-sm">
+        Não tem uma conta?{" "}
+        <Link href="/register" className="underline underline-offset-4 hover:text-primary">
+          Cadastre-se
+        </Link>
+      </div>
+    </div>
+  );
+}
