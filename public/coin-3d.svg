@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Moeda 3D">
+  <defs>
+    <radialGradient id="g_outer" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#fff6cc"/>
+      <stop offset="38%" stop-color="#f6d772"/>
+      <stop offset="72%" stop-color="#d6a53a"/>
+      <stop offset="100%" stop-color="#9b6b18"/>
+    </radialGradient>
+    <radialGradient id="g_inner" cx="38%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#fff8d9"/>
+      <stop offset="45%" stop-color="#f5d46a"/>
+      <stop offset="78%" stop-color="#c98c22"/>
+      <stop offset="100%" stop-color="#7d4f10"/>
+    </radialGradient>
+    <linearGradient id="g_rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff2b8" stop-opacity="0.95"/>
+      <stop offset="35%" stop-color="#f1c54b" stop-opacity="0.95"/>
+      <stop offset="70%" stop-color="#b97818" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#7d4f10" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="g_highlight" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="10" flood-color="#0b1224" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <circle cx="128" cy="132" r="92" fill="url(#g_outer)"/>
+    <circle cx="128" cy="132" r="78" fill="url(#g_inner)"/>
+
+    <circle cx="128" cy="132" r="92" fill="none" stroke="url(#g_rim)" stroke-width="10" opacity="0.9"/>
+
+    <path d="M66 114c20-32 60-48 98-40" fill="none" stroke="url(#g_highlight)" stroke-width="14" stroke-linecap="round" opacity="0.9"/>
+
+    <g opacity="0.28">
+      <path d="M78 164c22 18 78 18 100 0" fill="none" stroke="#3b1f00" stroke-width="10" stroke-linecap="round"/>
+    </g>
+
+    <g>
+      <path d="M128 92c-18 0-32 10-32 25 0 13 10 20 26 24l10 2c9 2 13 5 13 10 0 6-7 10-17 10-9 0-17-3-23-9l-11 13c7 8 18 13 33 14v14h15v-15c18-3 30-14 30-28 0-14-10-22-29-26l-11-2c-8-2-11-4-11-9 0-6 6-10 16-10 8 0 15 3 20 7l10-13c-7-7-16-11-25-12V92h-14v12Z" fill="#3b2400" opacity="0.22"/>
+      <path d="M128 90c-18 0-32 10-32 25 0 13 10 20 26 24l10 2c9 2 13 5 13 10 0 6-7 10-17 10-9 0-17-3-23-9l-11 13c7 8 18 13 33 14v14h15v-15c18-3 30-14 30-28 0-14-10-22-29-26l-11-2c-8-2-11-4-11-9 0-6 6-10 16-10 8 0 15 3 20 7l10-13c-7-7-16-11-25-12V90h-14v12Z" fill="#fff2b8" opacity="0.92"/>
+    </g>
+  </g>
+</svg>

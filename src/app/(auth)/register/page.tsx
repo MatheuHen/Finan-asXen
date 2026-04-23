@@ -4,7 +4,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,20 +12,19 @@ import { useRegister } from "@/hooks/auth/useRegister";
 
 const registerSchema = z
   .object({
-    name: z.string().min(2, "Nome deve ter no mínimo 2 caracteres"),
-    email: z.string().email("E-mail inválido"),
-    password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
+    name: z.string().min(2, "Você precisa digitar um nome com pelo menos 2 caracteres"),
+    email: z.string().email("Você precisa digitar um e-mail válido"),
+    password: z.string().min(6, "Você precisa digitar uma senha com pelo menos 6 caracteres"),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "As senhas não coincidem",
+    message: "Você precisa digitar a mesma senha nos dois campos",
     path: ["confirmPassword"],
   });
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
-  const router = useRouter();
   const { mutate: registerUser, isPending, error } = useRegister();
 
   const {
@@ -51,9 +49,9 @@ export default function RegisterPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-bold tracking-tight">Criar Conta</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Você cria sua conta</h1>
         <p className="text-sm text-muted-foreground">
-          Preencha os dados abaixo para se cadastrar
+          Você preenche seus dados para continuar
         </p>
       </div>
 
@@ -115,19 +113,19 @@ export default function RegisterPage() {
 
         {error && (
           <p className="text-sm text-destructive text-center">
-            {error.message || "Erro ao fazer cadastro"}
+            {error.message?.trim().startsWith("Você") ? error.message : "Você não conseguiu criar sua conta. Tente novamente."}
           </p>
         )}
 
         <Button type="submit" className="w-full" disabled={isPending}>
-          {isPending ? "Cadastrando..." : "Cadastrar"}
+          {isPending ? "Você está criando..." : "Você cria sua conta"}
         </Button>
       </form>
 
       <div className="text-center text-sm">
-        Já tem uma conta?{" "}
+        Você já tem uma conta?{" "}
         <Link href="/login" className="underline underline-offset-4 hover:text-primary">
-          Entre aqui
+          Você entra
         </Link>
       </div>
     </div>

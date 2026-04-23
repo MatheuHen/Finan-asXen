@@ -14,5 +14,6 @@ export function useFinancialSummary(params: FinancialSummaryParams = {}) {
     queryKey: [...FINANCIAL_SUMMARY_KEY, key],
     queryFn: () => transactionsService.getFinancialSummary(params),
     retry: false,
+    placeholderData: (prev) => prev,
   })
 }

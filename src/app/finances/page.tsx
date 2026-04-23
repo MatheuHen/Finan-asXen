@@ -12,6 +12,10 @@ import {
   SlidersHorizontal,
   Trash2,
   X,
+  ArrowDown,
+  ArrowUp,
+  Clock,
+  Receipt,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,14 +24,7 @@ import { formatBRL } from "@/lib/currency";
 import { formatPeriodHint, type PeriodPreset } from "@/lib/period";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
 import {
   Select,
   SelectContent,
@@ -59,8 +56,15 @@ import {
 } from "@/hooks/financial/useTransactions";
 import { useFinancialSummary } from "@/hooks/financial/useFinancialSummary";
 import { useUpcomingTransactions } from "@/hooks/financial/useUpcomingTransactions";
+import { useCategories } from "@/hooks/financial/useCategories";
+import { useProfile } from "@/hooks/auth/useProfile";
 import { TransactionForm, type TransactionFormValues } from "./components/TransactionForm";
-import type { CreateTransactionDTO, UpdateTransactionDTO } from "@/services/financial/transactions.service";
+import type {
+  CreateTransactionDTO,
+  RecurrenceType,
+  RecurrenceUnit,
+  UpdateTransactionDTO,
+} from "@/services/financial/transactions.service";
 import type { Transaction, TransactionStatus, TransactionType } from "@/services/financial/transactions.service";
 
 const statusLabels: Record<string, string> = {
@@ -68,6 +72,21 @@ const statusLabels: Record<string, string> = {
   paid: "Pago",
   late: "Atrasado",
   cancelled: "Cancelado",
+};
+
+const recurrenceTypeLabel: Record<RecurrenceType, string> = {
+  daily: "diária",
+  weekly: "semanal",
+  monthly: "mensal",
+  yearly: "anual",
+  custom: "personalizada",
+};
+
+const recurrenceUnitLabel: Record<RecurrenceUnit, string> = {
+  day: "dia(s)",
+  week: "semana(s)",
+  month: "mês(es)",
+  year: "ano(s)",
 };
 
 const typeFilterLabels: Record<"all" | TransactionType, string> = {
@@ -141,17 +160,10 @@ function sortMonthKeysDesc(keys: string[]) {
 type DayGroup = {
   dateKey: string;
   label: string;
-  items: Transaction[];
+  items: (Transaction & { balance: number })[];
 };
 
-function groupTransactionsByDay(transactions: Transaction[]) {
-  const statusRank: Record<TransactionStatus, number> = {
-    late: 0,
-    pending: 1,
-    paid: 2,
-    cancelled: 3,
-  };
-
+function groupTransactionsByDay(transactions: (Transaction & { balance: number })[]) {
   const map = new Map<string, DayGroup>();
   const groups: DayGroup[] = [];
 
@@ -166,12 +178,7 @@ function groupTransactionsByDay(transactions: Transaction[]) {
     day.items.push(t);
   }
 
-  return groups
-    .sort((a, b) => (a.dateKey < b.dateKey ? 1 : a.dateKey > b.dateKey ? -1 : 0))
-    .map((d) => ({
-      ...d,
-      items: [...d.items].sort((a, b) => statusRank[a.status] - statusRank[b.status]),
-    }));
+  return groups.sort((a, b) => (a.dateKey < b.dateKey ? 1 : a.dateKey > b.dateKey ? -1 : 0));
 }
 
 type ToastItem = {
@@ -182,11 +189,16 @@ type ToastItem = {
 
 function getErrorMessage(error: unknown) {
   if (!error) return null;
-  if (error instanceof Error) return error.message || "Erro desconhecido";
-  if (typeof error === "object" && error !== null && "message" in error) {
-    return String((error as { message?: unknown }).message ?? "Erro desconhecido");
-  }
-  return typeof error === "string" ? error : "Erro desconhecido";
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error !== null && "message" in error
+        ? String((error as { message?: unknown }).message ?? "")
+        : typeof error === "string"
+          ? error
+          : "";
+  if (message.trim().startsWith("Você")) return message;
+  return "Você não conseguiu concluir isso. Tente novamente.";
 }
 
 export default function FinancesPage() {
@@ -208,48 +220,50 @@ export default function FinancesPage() {
     "all"
   );
   const initialMonthKey = monthKeyFromDate(new Date());
-  const [monthTabs, setMonthTabs] = useState<string[]>([initialMonthKey]);
-  const [activeMonthKey, setActiveMonthKey] = useState<string>(initialMonthKey);
+  const [monthTabs, setMonthTabs] = useState<string[]>(() => [initialMonthKey]);
+
+  const [activeMonthKey, setActiveMonthKey] = useState<string>(() => initialMonthKey);
+  const [storageLoaded, setStorageLoaded] = useState(false);
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("custom");
-  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>(() =>
-    rangeFromMonthKey(initialMonthKey)
-  );
+  const periodPreset: PeriodPreset = "month";
+  const dateRange = useMemo(() => rangeFromMonthKey(activeMonthKey), [activeMonthKey]);
 
   useEffect(() => {
     try {
       const rawMonths = window.localStorage.getItem("finances_month_tabs_v1");
       const rawActive = window.localStorage.getItem("finances_active_month_v1");
+
       const parsed = rawMonths ? (JSON.parse(rawMonths) as unknown) : null;
       const months = Array.isArray(parsed)
         ? parsed.filter((x) => typeof x === "string" && /^\d{4}-\d{2}$/.test(x))
         : [];
 
       const merged = sortMonthKeysDesc(Array.from(new Set([initialMonthKey, ...months])));
-      setMonthTabs(merged);
+      const nextTabs = merged.length > 0 ? merged : [initialMonthKey];
+      setMonthTabs(nextTabs);
 
       const active =
         typeof rawActive === "string" && /^\d{4}-\d{2}$/.test(rawActive) ? rawActive : initialMonthKey;
-      setActiveMonthKey(merged.includes(active) ? active : merged[0] ?? initialMonthKey);
+      setActiveMonthKey(nextTabs.includes(active) ? active : nextTabs[0] ?? initialMonthKey);
     } catch {
-      setMonthTabs([initialMonthKey]);
-      setActiveMonthKey(initialMonthKey);
+    } finally {
+      setStorageLoaded(true);
     }
   }, [initialMonthKey]);
 
   useEffect(() => {
+    if (!storageLoaded) return;
     try {
       window.localStorage.setItem("finances_month_tabs_v1", JSON.stringify(monthTabs));
     } catch {}
-  }, [monthTabs]);
+  }, [monthTabs, storageLoaded]);
 
   useEffect(() => {
+    if (!storageLoaded) return;
     try {
       window.localStorage.setItem("finances_active_month_v1", activeMonthKey);
     } catch {}
-    setPeriodPreset("custom");
-    setDateRange(rangeFromMonthKey(activeMonthKey));
-  }, [activeMonthKey]);
+  }, [activeMonthKey, storageLoaded]);
 
   const { data: transactions, isLoading, error: listError } = useTransactions({
     from: dateRange.from,
@@ -257,6 +271,8 @@ export default function FinancesPage() {
   });
   const summary = useFinancialSummary({ from: dateRange.from, to: dateRange.to });
   const upcoming = useUpcomingTransactions({ from: dateRange.from, to: dateRange.to });
+  const categories = useCategories();
+  const profile = useProfile();
   const {
     mutate: createTransaction,
     isPending: isCreating,
@@ -281,6 +297,18 @@ export default function FinancesPage() {
     error: deleteInRangeError,
     reset: resetDeleteInRangeError,
   } = useDeleteTransactionsInRange();
+
+  const categoryMetaById = useMemo(() => {
+    const m = new Map<string, { name: string; color?: string | null }>();
+    for (const c of categories.data ?? []) m.set(c.id, { name: c.name, color: c.color });
+    return m;
+  }, [categories.data]);
+
+  const hourlyRate = useMemo(() => {
+    const v = profile.data?.hourly_rate;
+    const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [profile.data?.hourly_rate]);
 
   const removeMonthTab = (monthKey: string) => {
     setMonthTabs((prev) => {
@@ -330,6 +358,7 @@ export default function FinancesPage() {
       type: data.type,
       status: data.status,
       description: desc.length > 0 ? desc : null,
+      category_id: data.category_id ?? null,
       due_date: formatDateOnly(data.due_date),
       is_recurring: data.is_recurring,
       recurrence_type: data.recurrence_type,
@@ -376,8 +405,8 @@ export default function FinancesPage() {
             onSuccess: () => {
               handleCloseDialog();
               pushToast({
-                title: "Transação atualizada",
-                description: "Alterações salvas com sucesso.",
+                title: "Você salvou sua movimentação",
+                description: "Você salvou suas mudanças.",
               });
             },
           }
@@ -391,8 +420,8 @@ export default function FinancesPage() {
           onSuccess: () => {
             handleCloseDialog();
             pushToast({
-              title: "Transação atualizada",
-              description: "Alterações salvas com sucesso.",
+              title: "Você salvou sua movimentação",
+              description: "Você salvou suas mudanças.",
             });
           },
         }
@@ -404,8 +433,8 @@ export default function FinancesPage() {
       onSuccess: () => {
         handleCloseDialog();
         pushToast({
-          title: "Transação criada",
-          description: "Lançamento registrado com sucesso.",
+          title: "Você adicionou uma movimentação",
+          description: "Você adicionou sua movimentação.",
         });
       },
     });
@@ -426,8 +455,8 @@ export default function FinancesPage() {
       setDeleteDialogOpen(false);
       setDeletingTransaction(null);
       pushToast({
-        title: "Já removida",
-        description: "Esta transação já não está mais na lista.",
+        title: "Você já removeu isso",
+        description: "Você não encontra mais essa movimentação na lista.",
       });
       return;
     }
@@ -436,8 +465,8 @@ export default function FinancesPage() {
         setDeleteDialogOpen(false);
         setDeletingTransaction(null);
         pushToast({
-          title: "Transação excluída",
-          description: "Registro removido com sucesso.",
+          title: "Você removeu a movimentação",
+          description: "Você removeu a movimentação.",
         });
       },
     });
@@ -447,7 +476,7 @@ export default function FinancesPage() {
     const list = transactions ?? [];
     const q = search.trim().toLowerCase();
 
-    return list.filter((t) => {
+    const filtered = list.filter((t) => {
       if (typeFilter !== "all" && t.type !== typeFilter) return false;
       if (statusFilter !== "all" && t.status !== statusFilter) return false;
       const isRecurring = Boolean(t.recurrence_source_id || t.is_recurring);
@@ -459,6 +488,28 @@ export default function FinancesPage() {
       }
       return true;
     });
+
+    // Ordenar do mais antigo para o mais novo para calcular o saldo acumulado
+    const sorted = [...filtered].sort((a, b) => {
+      if (a.due_date < b.due_date) return -1;
+      if (a.due_date > b.due_date) return 1;
+      return a.created_at < b.created_at ? -1 : 1;
+    });
+
+    const withBalance = sorted.reduce(
+      (acc, t) => {
+        const amount = Number(t.amount || 0);
+        const nextBalance = acc.balance + (t.type === "income" ? amount : -amount);
+        return {
+          balance: nextBalance,
+          items: [...acc.items, { ...t, balance: nextBalance }],
+        };
+      },
+      { balance: 0, items: [] as Array<(typeof sorted)[number] & { balance: number }> }
+    ).items;
+
+    // Retornar do mais novo para o mais antigo (padrão de extrato)
+    return withBalance.reverse();
   }, [transactions, search, typeFilter, statusFilter, recurrenceFilter]);
 
   const groupedDays = useMemo(() => groupTransactionsByDay(filteredTransactions), [filteredTransactions]);
@@ -471,13 +522,13 @@ export default function FinancesPage() {
     if (lateCount > 0) {
       return {
         tone: "danger" as const,
-        text: "Você tem " + lateCount + " conta(s) atrasada(s) neste período.",
+        text: "Você tem " + lateCount + " conta(s) atrasada(s) aqui.",
       };
     }
     if (upcomingCount > 0)
       return {
         tone: "warning" as const,
-        text: "Você tem " + upcomingCount + " conta(s) próxima(s) do vencimento neste período.",
+        text: "Você tem " + upcomingCount + " conta(s) perto do vencimento aqui.",
       };
     return { tone: "success" as const, text: "Tudo em dia. Nenhuma conta pendente." };
   }, [upcoming.isLoading, upcoming.error, upcoming.data]);
@@ -488,9 +539,8 @@ export default function FinancesPage() {
     if (typeFilter !== "all") count++;
     if (statusFilter !== "all") count++;
     if (recurrenceFilter !== "all") count++;
-    if (periodPreset !== "month") count++;
     return count;
-  }, [search, typeFilter, statusFilter, recurrenceFilter, periodPreset]);
+  }, [search, typeFilter, statusFilter, recurrenceFilter]);
 
   const hasFilters =
     search.trim().length > 0 ||
@@ -501,24 +551,29 @@ export default function FinancesPage() {
   const sortedMonthTabs = useMemo(() => sortMonthKeysDesc(monthTabs), [monthTabs]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <section className="relative overflow-hidden rounded-4xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-white text-slate-900 shadow-sm dark:border-white/10 dark:from-[#050816] dark:via-[#11123a] dark:to-black dark:text-white dark:shadow-[0_30px_120px_-70px_rgba(0,0,0,0.85)]">
+        <div className="pointer-events-none absolute inset-0 opacity-90" aria-hidden>
+          <div className="absolute -inset-24 bg-[radial-gradient(circle_at_22%_18%,rgba(59,130,246,0.14),transparent_55%)] dark:bg-[radial-gradient(circle_at_22%_18%,rgba(56,189,248,0.22),transparent_55%)]" />
+          <div className="absolute -inset-24 bg-[radial-gradient(circle_at_78%_48%,rgba(99,102,241,0.12),transparent_55%)] dark:bg-[radial-gradient(circle_at_78%_48%,rgba(139,92,246,0.2),transparent_55%)]" />
+          <div className="absolute -inset-24 bg-[radial-gradient(circle_at_55%_90%,rgba(34,197,94,0.08),transparent_60%)] dark:bg-[radial-gradient(circle_at_55%_90%,rgba(34,197,94,0.14),transparent_60%)]" />
+          <div className="absolute inset-0 ring-1 ring-slate-200/70 dark:ring-white/10" />
+        </div>
+        <div className="relative flex flex-col gap-4 p-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Gestão Financeira</h2>
-          <p className="text-muted-foreground">
-            Controle entradas, saídas e acompanhe o seu saldo com clareza.
-          </p>
-          <div className="mt-2 text-sm text-muted-foreground">
+          <h2 className="text-3xl font-semibold tracking-tight">Gestão Financeira</h2>
+          <p className="mt-2 text-slate-600 dark:text-white/70">Controle entradas, saídas e acompanhe o seu saldo com clareza.</p>
+          <div className="mt-2 text-sm text-slate-600 dark:text-white/60">
             Exibindo dados de: {formatPeriodHint(periodPreset, dateRange)}
           </div>
           {microcopy && (
             <div
               className={
                 microcopy.tone === "danger"
-                  ? "mt-3 inline-flex items-center rounded-full border border-destructive/30 bg-destructive/10 px-3 py-1 text-sm font-medium text-destructive"
+                  ? "mt-3 inline-flex items-center rounded-full border border-rose-500/25 bg-rose-500/10 px-3 py-1 text-sm font-medium text-rose-700 dark:text-rose-200"
                   : microcopy.tone === "warning"
-                    ? "mt-3 inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-700"
-                    : "mt-3 inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-700"
+                    ? "mt-3 inline-flex items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-700 dark:text-amber-200"
+                    : "mt-3 inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-sm font-medium text-emerald-700 dark:text-emerald-200"
               }
             >
               {microcopy.text}
@@ -533,16 +588,30 @@ export default function FinancesPage() {
                 size="sm"
                 variant={monthKey === activeMonthKey ? "secondary" : "outline"}
                 onClick={() => setActiveMonthKey(monthKey)}
+                className={
+                  monthKey === activeMonthKey
+                    ? "bg-blue-50 border-blue-200 text-blue-700 shadow-[0_0_40px_-28px_rgba(59,130,246,0.45)] dark:bg-white/10 dark:border-white/15 dark:text-white"
+                    : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/10"
+                }
               >
                 {formatMonthLabel(monthKey)}
               </Button>
             ))}
 
             <Popover open={monthPickerOpen} onOpenChange={setMonthPickerOpen}>
-              <PopoverTrigger render={<Button variant="outline" size="sm" type="button" />}>
-                <CalendarIcon className="mr-2 size-4 opacity-60" />
-                Novo mês
-              </PopoverTrigger>
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/10"
+                  >
+                    <CalendarIcon className="mr-2 size-4 opacity-60" />
+                    Novo mês
+                  </Button>
+                }
+              />
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
@@ -560,10 +629,19 @@ export default function FinancesPage() {
             </Popover>
 
             <Popover>
-              <PopoverTrigger render={<Button variant="outline" size="sm" type="button" />}>
-                <MoreHorizontal className="mr-2 size-4 opacity-60" />
-                Ações
-              </PopoverTrigger>
+              <PopoverTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/10"
+                  >
+                    <MoreHorizontal className="mr-2 size-4 opacity-60" />
+                    Ações
+                  </Button>
+                }
+              />
               <PopoverContent className="w-[260px] p-2" align="start">
                 <div className="space-y-2">
                   <Button
@@ -576,7 +654,7 @@ export default function FinancesPage() {
                       setDeleteMonthTransactionsOpen(true);
                     }}
                   >
-                    Excluir contas do mês
+                    Remover contas do mês
                   </Button>
                   <Button
                     type="button"
@@ -587,7 +665,7 @@ export default function FinancesPage() {
                       setDeleteMonthOpen(true);
                     }}
                   >
-                    Excluir mês
+                    Remover mês
                   </Button>
                 </div>
               </PopoverContent>
@@ -596,14 +674,21 @@ export default function FinancesPage() {
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger render={<Button onClick={() => handleOpenDialog()} />}>
-            <Plus className="mr-2 size-4" />
-            Nova Transação
-          </DialogTrigger>
+          <DialogTrigger
+            render={
+              <Button
+                onClick={() => handleOpenDialog()}
+                className="bg-blue-600/10 border-blue-200 text-blue-700 hover:bg-blue-600/15 dark:bg-sky-500/15 dark:border-sky-400/25 dark:text-white dark:hover:bg-sky-500/20"
+              >
+                <Plus className="mr-2 size-4" />
+                Adicionar
+              </Button>
+            }
+          />
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>
-                {editingTransaction ? "Editar Transação" : "Nova Transação"}
+                {editingTransaction ? "Editar" : "Adicionar"}
               </DialogTitle>
             </DialogHeader>
             {(createError || updateError) && (
@@ -619,7 +704,8 @@ export default function FinancesPage() {
             />
           </DialogContent>
         </Dialog>
-      </div>
+        </div>
+      </section>
 
       {(listError || deleteError || deleteInRangeError || summary.error) && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between gap-3">
@@ -772,7 +858,7 @@ export default function FinancesPage() {
                 </div>
 
                 <div className="lg:col-span-2">
-                  <div className="text-sm font-medium">Recorrência</div>
+                  <div className="text-sm font-medium">Repetição</div>
                   <Select
                     value={recurrenceFilter}
                     onValueChange={(v) =>
@@ -784,14 +870,14 @@ export default function FinancesPage() {
                         {recurrenceFilter === "all"
                           ? "Todas"
                           : recurrenceFilter === "recurring"
-                            ? "Recorrentes"
-                            : "Não recorrentes"}
+                            ? "Com repetição"
+                            : "Sem repetição"}
                       </span>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas</SelectItem>
-                      <SelectItem value="recurring">Recorrentes</SelectItem>
-                      <SelectItem value="nonRecurring">Não recorrentes</SelectItem>
+                      <SelectItem value="recurring">Com repetição</SelectItem>
+                      <SelectItem value="nonRecurring">Sem repetição</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -800,162 +886,198 @@ export default function FinancesPage() {
             </div>
           )}
           <div className="px-4 pb-3 text-sm text-muted-foreground">
-            Mostrando {filteredTransactions.length} de {transactions?.length ?? 0}
+            Você está vendo {filteredTransactions.length} de {transactions?.length ?? 0}
           </div>
         </div>
       </div>
 
-      <div className="rounded-md border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[56px]">Nº</TableHead>
-              <TableHead>Descrição</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Valor</TableHead>
-              <TableHead className="w-[100px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
-                  Carregando transações...
-                </TableCell>
-              </TableRow>
-            ) : groupedDays.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
-                  {hasFilters ? "Nenhuma transação encontrada com os filtros atuais." : "Nenhuma transação encontrada."}
-                </TableCell>
-              </TableRow>
-            ) : (
-              (() => {
-                let seq = 1;
-                return groupedDays.flatMap((day) => {
-                  const incomeTotal = day.items
-                    .filter((t) => t.type === "income")
-                    .reduce((acc, t) => acc + Number(t.amount || 0), 0);
-                  const expenseTotal = day.items
-                    .filter((t) => t.type === "expense")
-                    .reduce((acc, t) => acc + Number(t.amount || 0), 0);
+      <div className="space-y-6">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4">
+            <div className="size-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p>Você está carregando suas movimentações...</p>
+          </div>
+        ) : groupedDays.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4 bg-card rounded-2xl border border-dashed">
+            <Receipt className="size-12 opacity-20" />
+            <p className="text-lg font-medium">{hasFilters ? "Você não viu nada com esses filtros." : "Você ainda não adicionou nenhuma movimentação"}</p>
+            {!hasFilters && <p className="text-sm opacity-70">Você pode começar adicionando uma entrada ou uma saída</p>}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {groupedDays.map((day) => {
+              const incomeTotal = day.items
+                .filter((t) => t.type === "income")
+                .reduce((acc, t) => acc + Number(t.amount || 0), 0);
+              const expenseTotal = day.items
+                .filter((t) => t.type === "expense")
+                .reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
-                  const headerRow = (
-                    <TableRow key={"day-" + day.dateKey} className="bg-muted/40">
-                      <TableCell colSpan={6} className="py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="font-semibold">
-                            {day.label} ({day.items.length} item(ns))
-                          </div>
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1 text-emerald-700">
-                            <ArrowUpRight className="size-3" /> Receitas: {formatBRL(incomeTotal)}
-                          </span>
-                          <span className="inline-flex items-center gap-1 text-destructive">
-                            <ArrowDownRight className="size-3" /> Despesas: {formatBRL(expenseTotal)}
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
+              return (
+                <div key={day.dateKey} className="space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="flex items-center justify-between border-b pb-2 px-2">
+                    <span className="text-sm font-semibold text-muted-foreground">{day.label}</span>
+                    <div className="flex items-center gap-4 text-xs font-medium">
+                      {incomeTotal > 0 && (
+                        <span className="text-emerald-600 flex items-center gap-1">
+                          <ArrowUp className="size-3" />
+                          {formatBRL(incomeTotal)}
+                        </span>
+                      )}
+                      {expenseTotal > 0 && (
+                        <span className="text-destructive flex items-center gap-1">
+                          <ArrowDown className="size-3" />
+                          {formatBRL(expenseTotal)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                  const itemRows = day.items.map((transaction) => {
-                    const rowNumber = seq++;
+                  <div className="space-y-1">
+                    {day.items.map((transaction) => {
                       const isRecurring = Boolean(
                         transaction.recurrence_source_id || transaction.is_recurring
                       );
-                    const isVirtual = transaction.id.startsWith("virtual:");
-                    const rowTone =
-                      transaction.status === "late"
-                        ? "bg-destructive/5"
-                        : transaction.status === "pending"
-                          ? "bg-amber-500/5"
-                          : undefined;
+                      const isVirtual = transaction.id.startsWith("virtual:");
+                      const recurrenceType = (transaction.recurrence_type as RecurrenceType | null) ?? null;
+                      const recurrenceInterval =
+                        Number.isFinite(transaction.recurrence_interval) && Number(transaction.recurrence_interval) >= 1
+                          ? Math.trunc(Number(transaction.recurrence_interval))
+                          : 1;
+                      const recurrenceUnit = (transaction.recurrence_unit as RecurrenceUnit | null) ?? null;
+                      const recurrenceText =
+                        recurrenceType === "custom"
+                          ? `Você repete a cada ${recurrenceInterval} ${recurrenceUnit ? recurrenceUnitLabel[recurrenceUnit] : "unidade"}`
+                          : recurrenceType
+                            ? `Você repete ${recurrenceTypeLabel[recurrenceType]}`
+                            : transaction.recurrence_source_id
+                              ? "Você está vendo uma conta repetida"
+                              : null;
 
-                    return (
-                      <TableRow key={transaction.id} className={rowTone}>
-                        <TableCell className="text-muted-foreground tabular-nums">{rowNumber}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="truncate">{transaction.description || "Sem descrição"}</span>
-                            {isRecurring && (
-                              <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                                Recorrente
-                              </span>
+                      return (
+                        <div
+                          key={transaction.id}
+                          className="group relative flex items-center justify-between p-3 rounded-2xl hover:bg-muted/50 transition-all duration-200"
+                        >
+                          <div className="flex items-center gap-4 min-w-0 flex-1">
+                            <div
+                              className={`flex-shrink-0 size-10 rounded-full flex items-center justify-center ${
+                                transaction.type === "income"
+                                  ? "bg-emerald-500/10 text-emerald-600"
+                                  : "bg-destructive/10 text-destructive"
+                              }`}
+                            >
+                              {transaction.type === "income" ? (
+                                <ArrowUpRight className="size-5" />
+                              ) : (
+                                <ArrowDownRight className="size-5" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm truncate">
+                                  {transaction.description || "Sem descrição"}
+                                </p>
+                                {isRecurring && (
+                                  <Clock className="size-3 text-muted-foreground" />
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                                <span
+                                  className={
+                                    "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium " +
+                                    getStatusBadgeClass(transaction.status)
+                                  }
+                                >
+                                  {statusLabels[transaction.status] || transaction.status}
+                                </span>
+                                <span className="flex items-center gap-1 opacity-70">
+                                  <span
+                                    className="size-2.5 rounded-full border border-black/5 dark:border-white/10"
+                                    style={{
+                                      backgroundColor: transaction.category_id
+                                        ? categoryMetaById.get(transaction.category_id)?.color ?? "transparent"
+                                        : "transparent",
+                                    }}
+                                    aria-hidden
+                                  />
+                                  {transaction.category_id
+                                    ? categoryMetaById.get(transaction.category_id)?.name ?? "Sem categoria"
+                                    : "Sem categoria"}
+                                </span>
+                                {recurrenceText && (
+                                  <span className="inline-flex items-center rounded-full border border-slate-300/70 px-1.5 py-0.5 text-[10px] font-medium dark:border-white/15">
+                                    {recurrenceText}
+                                  </span>
+                                )}
+                                {transaction.recurrence_source_id && (
+                                  <span className="inline-flex items-center rounded-full border border-slate-300/70 px-1.5 py-0.5 text-[10px] font-medium dark:border-white/15">
+                                    origem: {transaction.recurrence_source_id.slice(0, 8)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-1 ml-4 flex-shrink-0">
+                            <p
+                              className={`font-semibold text-sm ${
+                                transaction.type === "income"
+                                  ? "text-emerald-600"
+                                  : ""
+                              }`}
+                            >
+                              {transaction.type === "income" ? "+" : "-"}
+                              {formatBRL(Number(transaction.amount))}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground font-medium">
+                              Você fica com: {formatBRL(transaction.balance)}
+                            </p>
+                            {transaction.type === "expense" && hourlyRate && (
+                              <p className="text-[11px] text-muted-foreground">
+                                Você gastou{" "}
+                                {(
+                                  Number(transaction.amount) / hourlyRate
+                                ).toLocaleString("pt-BR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                                h da sua vida aqui
+                              </p>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={
-                              transaction.type === "income"
-                                ? "inline-flex items-center gap-1.5 text-emerald-600 font-medium"
-                                : "inline-flex items-center gap-1.5 text-destructive font-medium"
-                            }
-                          >
-                            {transaction.type === "income" ? (
-                              <ArrowUpRight className="size-4" />
-                            ) : (
-                              <ArrowDownRight className="size-4" />
-                            )}
-                            {transaction.type === "income" ? "Receita" : "Despesa"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={
-                              "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium " +
-                              getStatusBadgeClass(transaction.status)
-                            }
-                          >
-                            {statusLabels[transaction.status] || transaction.status}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          <span
-                            className={
-                              transaction.type === "income" ? "text-emerald-600" : "text-destructive"
-                            }
-                          >
-                            {formatBRL(Number(transaction.amount))}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex justify-end gap-2">
+
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 backdrop-blur-sm p-1 rounded-lg shadow-sm border">
                             <Button
                               variant="ghost"
                               size="icon"
-                              type="button"
+                              className="size-7"
                               onClick={() => handleOpenDialog(transaction)}
                               disabled={isVirtual}
-                              title={isVirtual ? "Ocorrência prevista (não registrada no banco)" : "Editar"}
+                              title={isVirtual ? "Você está vendo uma conta prevista" : "Você ajusta esta movimentação"}
                             >
-                              <Pencil className="size-4 text-muted-foreground" />
+                              <Pencil className="size-3.5 text-muted-foreground" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              type="button"
+                              className="size-7"
                               onClick={() => handleDelete(transaction.id)}
                               disabled={isDeleting || isVirtual}
-                              title={isVirtual ? "Ocorrência prevista (não registrada no banco)" : "Excluir"}
+                              title={isVirtual ? "Você está vendo uma conta prevista" : "Você remove esta movimentação"}
                             >
-                              <Trash2 className="size-4 text-destructive" />
+                              <Trash2 className="size-3.5 text-destructive" />
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  });
-
-                  return [headerRow, ...itemRows];
-                });
-              })()
-            )}
-          </TableBody>
-        </Table>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Dialog
@@ -972,9 +1094,9 @@ export default function FinancesPage() {
       >
         <DialogContent className="sm:max-w-[420px]" showCloseButton>
           <DialogHeader>
-            <DialogTitle>Excluir transação</DialogTitle>
+            <DialogTitle>Remover movimentação</DialogTitle>
             <DialogDescription>
-              Esta ação não pode ser desfeita. Confirme para remover a transação selecionada.
+              Você pode remover esta movimentação. Confirme para continuar.
             </DialogDescription>
           </DialogHeader>
 
@@ -1015,7 +1137,7 @@ export default function FinancesPage() {
               onClick={confirmDelete}
               disabled={!deletingTransaction || isDeleting}
             >
-              {isDeleting ? "Excluindo..." : "Excluir"}
+              {isDeleting ? "Removendo..." : "Remover"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1035,10 +1157,9 @@ export default function FinancesPage() {
       >
         <DialogContent className="sm:max-w-[460px]" showCloseButton>
           <DialogHeader>
-            <DialogTitle>Excluir todas as contas do mês</DialogTitle>
+            <DialogTitle>Remover tudo deste mês</DialogTitle>
             <DialogDescription>
-              Isso remove definitivamente todas as transações reais do mês selecionado. Ocorrências previstas
-              (virtuais) não são salvas no banco.
+              Você vai remover todas as movimentações que registrou neste mês. Ocorrências previstas não entram aqui.
             </DialogDescription>
           </DialogHeader>
 
@@ -1052,11 +1173,11 @@ export default function FinancesPage() {
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium">Digite EXCLUIR para confirmar</div>
+            <div className="text-sm font-medium">Você digita REMOVER para confirmar</div>
             <Input
               value={deleteMonthTransactionsConfirm}
               onChange={(e) => setDeleteMonthTransactionsConfirm(e.target.value)}
-              placeholder="EXCLUIR"
+              placeholder="REMOVER"
               autoComplete="off"
             />
           </div>
@@ -1084,7 +1205,7 @@ export default function FinancesPage() {
               variant="destructive"
               disabled={
                 isDeletingInRange ||
-                deleteMonthTransactionsConfirm.trim().toUpperCase() !== "EXCLUIR" ||
+                deleteMonthTransactionsConfirm.trim().toUpperCase() !== "REMOVER" ||
                 !dateRange.from ||
                 !dateRange.to
               }
@@ -1097,15 +1218,15 @@ export default function FinancesPage() {
                       setDeleteMonthTransactionsOpen(false);
                       setDeleteMonthTransactionsConfirm("");
                       pushToast({
-                        title: "Contas excluídas",
-                        description: String(res.deletedCount) + " transação(ões) removida(s) deste mês.",
+                        title: "Você removeu tudo",
+                        description: "Você removeu " + String(res.deletedCount) + " movimentação(ões) deste mês.",
                       });
                     },
                   }
                 );
               }}
             >
-              {isDeletingInRange ? "Excluindo..." : "Excluir"}
+              {isDeletingInRange ? "Removendo..." : "Remover"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1120,19 +1241,18 @@ export default function FinancesPage() {
       >
         <DialogContent className="sm:max-w-[460px]" showCloseButton>
           <DialogHeader>
-            <DialogTitle>Excluir mês</DialogTitle>
+            <DialogTitle>Remover mês</DialogTitle>
             <DialogDescription>
-              Isso remove apenas a aba do mês. Para apagar as contas do mês, use “Excluir contas do mês”.
+              Você remove apenas a aba do mês. Para remover as contas do mês, você usa “Remover contas do mês”.
             </DialogDescription>
           </DialogHeader>
 
           <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
             <div className="font-medium">{formatMonthLabel(activeMonthKey)}</div>
-            <div className="text-muted-foreground">Mês: {activeMonthKey}</div>
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium">Digite REMOVER para confirmar</div>
+            <div className="text-sm font-medium">Você digita REMOVER para confirmar</div>
             <Input
               value={deleteMonthConfirm}
               onChange={(e) => setDeleteMonthConfirm(e.target.value)}
@@ -1161,12 +1281,12 @@ export default function FinancesPage() {
                 setDeleteMonthOpen(false);
                 setDeleteMonthConfirm("");
                 pushToast({
-                  title: "Mês removido",
-                  description: "A aba do mês foi removida com sucesso.",
+                  title: "Você removeu o mês",
+                  description: "Você removeu a aba do mês com sucesso.",
                 });
               }}
             >
-              Excluir mês
+              Remover mês
             </Button>
           </DialogFooter>
         </DialogContent>

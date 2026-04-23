@@ -1,19 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { Providers } from "@/app/providers";
-
-const geistSans = Geist({
-  variable: "--font-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "AppControleDeVidaXen",
@@ -28,9 +18,19 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className="h-full antialiased"
     >
       <body className="min-h-full">
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(() => {
+  try {
+    const stored = localStorage.getItem("theme");
+    const shouldDark = stored === "dark";
+    document.documentElement.classList.toggle("dark", shouldDark);
+  } catch {}
+})();`}
+        </Script>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

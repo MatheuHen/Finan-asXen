@@ -4,7 +4,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,14 +11,13 @@ import { Label } from "@/components/ui/label";
 import { useLogin } from "@/hooks/auth/useLogin";
 
 const loginSchema = z.object({
-  email: z.string().email("E-mail inválido"),
-  password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres"),
+  email: z.string().email("Você precisa digitar um e-mail válido"),
+  password: z.string().min(6, "Você precisa digitar uma senha com pelo menos 6 caracteres"),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const router = useRouter();
   const { mutate: login, isPending, error } = useLogin();
 
   const {
@@ -42,9 +40,9 @@ export default function LoginPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-bold tracking-tight">Entrar</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Você entra</h1>
         <p className="text-sm text-muted-foreground">
-          Digite suas credenciais para acessar o sistema
+          Você digita seus dados para entrar
         </p>
       </div>
 
@@ -78,19 +76,19 @@ export default function LoginPage() {
 
         {error && (
           <p className="text-sm text-destructive text-center">
-            {error.message || "Erro ao fazer login"}
+            {error.message?.trim().startsWith("Você") ? error.message : "Você não conseguiu entrar. Tente novamente."}
           </p>
         )}
 
         <Button type="submit" className="w-full" disabled={isPending}>
-          {isPending ? "Entrando..." : "Entrar"}
+          {isPending ? "Você está entrando..." : "Você entra"}
         </Button>
       </form>
 
       <div className="text-center text-sm">
-        Não tem uma conta?{" "}
+        Você ainda não tem uma conta?{" "}
         <Link href="/register" className="underline underline-offset-4 hover:text-primary">
-          Cadastre-se
+          Você cria sua conta
         </Link>
       </div>
     </div>

@@ -8,6 +8,7 @@ import {
 import { FINANCIAL_SUMMARY_KEY } from "@/hooks/financial/useFinancialSummary";
 import { FINANCIAL_TIMELINE_KEY } from "@/hooks/financial/useFinancialTimeline";
 import { UPCOMING_TRANSACTIONS_KEY } from "@/hooks/financial/useUpcomingTransactions";
+import { GOALS_KEY } from "@/hooks/financial/useGoals";
 import { normalizeRangeKey } from "@/lib/period";
 
 const TRANSACTIONS_KEY = ["transactions"];
@@ -27,15 +28,18 @@ function scheduleInvalidateFinancialQueries(queryClient: ReturnType<typeof useQu
     queryClient.invalidateQueries({ queryKey: FINANCIAL_SUMMARY_KEY });
     queryClient.invalidateQueries({ queryKey: FINANCIAL_TIMELINE_KEY });
     queryClient.invalidateQueries({ queryKey: UPCOMING_TRANSACTIONS_KEY });
+    queryClient.invalidateQueries({ queryKey: GOALS_KEY });
   });
 }
 
-export function useTransactions(params: GetTransactionsParams = {}) {
+export function useTransactions(params: GetTransactionsParams = {}, options?: { enabled?: boolean }) {
   const key = normalizeRangeKey(params);
   return useQuery({
     queryKey: [...TRANSACTIONS_KEY, key],
     queryFn: () => transactionsService.getTransactions(params),
+    enabled: options?.enabled ?? true,
     retry: false,
+    placeholderData: (prev) => prev,
   });
 }
 

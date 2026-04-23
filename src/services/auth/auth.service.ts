@@ -1,5 +1,4 @@
 import { getSupabaseBrowserClient } from "../supabase/client";
-import type { SignUpWithPasswordCredentials, SignInWithPasswordCredentials } from "@supabase/supabase-js";
 
 type SignUpData = { email: string; password: string; name: string };
 type SignInData = { email: string; password: string };
@@ -12,6 +11,12 @@ function translateAuthError(error: unknown): Error {
   const code = err.code ?? err.status;
   const message = typeof err.message === "string" ? err.message.toLowerCase() : "";
 
+  if (message.includes("não foi possível conectar agora") || message.includes("não conseguiu se conectar agora")) {
+    return new Error("Não foi possível conectar agora. Tente novamente.");
+  }
+  if (message.includes("failed to fetch") || message.includes("networkerror")) {
+    return new Error("Não foi possível conectar agora. Tente novamente.");
+  }
   if (message.includes("invalid login credentials")) {
     return new Error("E-mail ou senha incorretos.");
   }
@@ -62,9 +67,16 @@ export const authService = {
   },
 
   async getSession() {
-    const supabase = getSupabaseBrowserClient();
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw translateAuthError(error);
-    return data.session;
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw translateAuthError(error);
+      return data.session;
+    } catch (e) {
+      const err = translateAuthError(e);
+      const lower = err.message.toLowerCase();
+      if (lower.includes("não conseguiu se conectar") || lower.includes("não foi possível conectar")) return null;
+      throw err;
+    }
   },
 };

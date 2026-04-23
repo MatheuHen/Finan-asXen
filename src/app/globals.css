@@ -49,6 +49,9 @@
 }
 
 :root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-geist-mono: var(--font-mono);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -122,9 +125,44 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground transition-colors duration-300;
   }
   html {
-    @apply font-sans;
+    @apply font-sans transition-colors duration-300;
   }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gradient-shift {
+  background-size: 200% 200%;
+  animation: gradientShift 12s ease-in-out infinite;
+}
+
+@keyframes coinFloatSpin {
+  0% {
+    transform: translate3d(0, -5px, 0) rotateZ(-2deg) rotateY(-10deg);
+  }
+  50% {
+    transform: translate3d(0, 5px, 0) rotateZ(2deg) rotateY(10deg);
+  }
+  100% {
+    transform: translate3d(0, -5px, 0) rotateZ(-2deg) rotateY(-10deg);
+  }
+}
+
+.coin-float-spin {
+  transform-style: preserve-3d;
+  animation: coinFloatSpin 4s ease-in-out infinite;
+  will-change: transform;
 }

@@ -36,36 +36,44 @@ export type CreateTransactionDTO = Omit<
 export type UpdateTransactionDTO = Partial<CreateTransactionDTO> & { id: string };
 
 function toError(error: unknown): Error {
-  if (error instanceof Error) return error;
+  if (error instanceof Error) {
+    const message = String(error.message ?? "");
+    const lower = message.toLowerCase();
+    if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+      return new Error("Você não conseguiu se conectar agora. Verifique sua internet e tente novamente.");
+    }
+    return error;
+  }
   if (typeof error === "object" && error !== null && "code" in error) {
     const code = String((error as { code?: unknown }).code ?? "");
     if (code === "23503") {
-      return new Error(
-        "Seu usuário ainda não possui perfil (profiles). Faça logout/login e, se persistir, rode a migration de profiles no Supabase ou crie o profile do usuário."
-      );
+      return new Error("Você não conseguiu usar sua conta agora. Tente sair e entrar de novo.");
     }
   }
   if (typeof error === "object" && error !== null && "message" in error) {
     const message = String((error as { message?: unknown }).message ?? "Erro desconhecido");
+    const lower = message.toLowerCase();
+    if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+      return new Error("Você não conseguiu se conectar agora. Verifique sua internet e tente novamente.");
+    }
     if (
       message.includes("violates foreign key constraint") &&
       message.includes("financial_transactions_user_id_fkey")
     ) {
-      return new Error(
-        "Seu usuário ainda não possui perfil (profiles). Faça logout/login e, se persistir, rode a migration de profiles no Supabase ou crie o profile do usuário."
-      );
+      return new Error("Você não conseguiu usar sua conta agora. Tente sair e entrar de novo.");
     }
     if (
       message.includes("Could not find the table") &&
       message.includes("financial_transactions")
     ) {
-      return new Error(
-        "Tabela financial_transactions não encontrada no Supabase. Rode as migrations/SQL no projeto Supabase e atualize o cache do schema."
-      );
+      return new Error("Você não conseguiu carregar suas movimentações agora. Tente novamente.");
     }
-    return new Error(message);
+    if (message.trim().startsWith("Você")) return new Error(message);
+    return new Error("Você não conseguiu concluir isso. Tente novamente.");
   }
-  return new Error(typeof error === "string" ? error : "Erro desconhecido");
+  const message = typeof error === "string" ? error : "";
+  if (message.trim().startsWith("Você")) return new Error(message);
+  return new Error("Você não conseguiu concluir isso. Tente novamente.");
 }
 
 function isMissingColumnError(error: unknown) {
@@ -138,11 +146,11 @@ function normalizeRecurrenceFields(input: RecurrenceFields) {
 
   const interval = Number(input.recurrence_interval);
   if (!Number.isFinite(interval) || interval < 1) {
-    throw new Error("Informe um intervalo válido (>= 1) para recorrência personalizada.");
+    throw new Error("Você precisa informar um intervalo válido (a partir de 1) para a repetição.");
   }
   const unit = input.recurrence_unit;
   if (unit !== "day" && unit !== "week" && unit !== "month" && unit !== "year") {
-    throw new Error("Selecione a unidade da recorrência personalizada.");
+    throw new Error("Você precisa escolher a unidade da repetição.");
   }
 
   return {
@@ -174,17 +182,17 @@ function normalizeRecurrenceRangeFields(input: RecurrenceFields) {
   const start = input.recurrence_start_date ?? input.due_date ?? null;
   const end = input.recurrence_end_date ?? null;
   if (!start || !end) {
-    throw new Error("Selecione a data inicial e a data final da recorrência.");
+    throw new Error("Você precisa escolher uma data inicial e uma data final para a repetição.");
   }
   const startDate = parseDateOnly(start);
   const endDate = parseDateOnly(end);
   if (!startDate || !endDate) {
-    throw new Error("Datas de recorrência inválidas.");
+    throw new Error("Você precisa escolher datas válidas para a repetição.");
   }
   const s = dateOnly(startDate);
   const e = dateOnly(endDate);
   if (s.getTime() > e.getTime()) {
-    throw new Error("A data final da recorrência deve ser maior ou igual à inicial.");
+    throw new Error("Você precisa usar uma data final igual ou depois da inicial.");
   }
 
   return {
@@ -229,9 +237,7 @@ async function ensureUserProfile(supabase: ReturnType<typeof getSupabaseBrowserC
 
   if (insertError) {
     console.error("[ensureUserProfile]", insertError);
-    throw new Error(
-      "Não foi possível criar o profile automaticamente (RLS). No Supabase, crie o profile do usuário ou adicione policy de INSERT em profiles para auth.uid() = id."
-    );
+    throw new Error("Você não conseguiu preparar sua conta agora. Tente sair e entrar de novo.");
   }
 
   return inserted as UserProfileRow;
@@ -241,7 +247,7 @@ async function requireUserId() {
   const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase.auth.getUser();
   if (error) throw toError(error);
-  if (!data.user?.id) throw new Error("Usuário não autenticado");
+  if (!data.user?.id) throw new Error("Você precisa entrar para continuar.");
   return { supabase, userId: data.user.id };
 }
 
@@ -430,7 +436,7 @@ function buildRecurringOccurrencesInRange(
   while (cursor <= toDay) {
     if (rows.length >= maxOccurrences) {
       throw new Error(
-        "Recorrência gera ocorrências demais para o período selecionado. Ajuste a data final da recorrência ou selecione um período menor."
+        "Você escolheu um intervalo grande demais para uma repetição. Ajuste a repetição ou escolha um intervalo menor."
       );
     }
     rows.push({
@@ -462,7 +468,6 @@ let didWarnAutoRecurrenceDisabled = false;
 function warnAutoRecurrenceDisabled() {
   if (didWarnAutoRecurrenceDisabled) return;
   didWarnAutoRecurrenceDisabled = true;
-  console.warn("Recorrência automática desativada; recorrências são exibidas por período sem gerar dados.");
 }
 
 function maxDate(a: Date, b: Date) {
@@ -666,8 +671,6 @@ export const transactionsService = {
       throw new Error("Período inválido para exclusão.");
     }
 
-    console.log("[DELETE RANGE]", { user_id: userId, from: fromStr, to: toStr });
-
     const { error, count } = await supabase
       .from("financial_transactions")
       .delete({ count: "exact" })
@@ -852,16 +855,6 @@ export const transactionsService = {
       user_id: userId,
     };
 
-    console.log("[createTransaction payload]", payload);
-    console.log("[createTransaction recurrence]", {
-      is_recurring: payload.is_recurring,
-      recurrence_type: payload.recurrence_type,
-      recurrence_interval: payload.recurrence_interval,
-      recurrence_unit: payload.recurrence_unit,
-      recurrence_start_date: payload.recurrence_start_date,
-      recurrence_end_date: payload.recurrence_end_date,
-    });
-
     const { data, error } = await supabase
       .from("financial_transactions")
       .insert(payload)
@@ -970,9 +963,6 @@ export const transactionsService = {
     if (userError) throw toError(userError);
     if (!user?.id) throw new Error("Usuário não autenticado");
     const userId = user.id;
-
-    console.log("[DELETE SAFE]", id);
-    console.log("[DELETE]", { id, user_id: userId });
 
     const { error, count } = await supabase
       .from("financial_transactions")

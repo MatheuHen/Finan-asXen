@@ -15,6 +15,14 @@ export function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function endOfYear(date: Date) {
+  return new Date(date.getFullYear(), 11, 31);
+}
+
 export function getPresetRange(preset: PeriodPreset) {
   const today = startOfDay(new Date());
   if (preset === "today") return { from: today, to: today };
@@ -22,8 +30,8 @@ export function getPresetRange(preset: PeriodPreset) {
     return { from: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6), to: today };
   if (preset === "30d")
     return { from: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29), to: today };
-  if (preset === "month") return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: today };
-  if (preset === "year") return { from: new Date(today.getFullYear(), 0, 1), to: today };
+  if (preset === "month") return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: endOfMonth(today) };
+  if (preset === "year") return { from: new Date(today.getFullYear(), 0, 1), to: endOfYear(today) };
   return {};
 }
 
@@ -57,4 +65,3 @@ export function formatPeriodHint(preset: PeriodPreset, range: { from?: Date; to?
   if (to) return "Até " + to.toLocaleDateString("pt-BR");
   return PERIOD_PRESET_LABELS.custom;
 }
-

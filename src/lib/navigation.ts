@@ -5,54 +5,63 @@ export type RouteMeta = {
 
 export const ROUTE_META: Record<string, RouteMeta> = {
   "/": {
-    title: "Dashboard",
+    title: "Seu período",
     description:
-      "Visão geral do app: resumo do momento e atalhos para as áreas principais.",
+      "Veja como você está neste período.",
+  },
+  "/global": {
+    title: "Visão geral",
+    description:
+      "Veja tudo o que você já construiu.",
   },
   "/finances": {
     title: "Finanças",
     description:
-      "Registro e gestão de receitas e despesas (transações), com tipo, valor, data e status.",
+      "Você registra o que ganhou e o que gastou, e acompanha seu dinheiro.",
+  },
+  "/categories": {
+    title: "Categorias",
+    description:
+      "Você organiza suas movimentações por categoria para entender melhor para onde seu dinheiro vai.",
   },
   "/goals": {
     title: "Metas",
     description:
-      "Criação e acompanhamento de objetivos financeiros/pessoais até concluir, pausar ou ajustar.",
+      "Você define metas e acompanha seu progresso, passo a passo.",
   },
   "/savings": {
     title: "Economias",
     description:
-      "Histórico do dinheiro guardado (aportes livres) para acompanhar evolução ao longo do tempo.",
+      "Você vê quanto sobrou do que ganhou e como isso evoluiu.",
   },
   "/emergency": {
     title: "Reserva",
     description:
-      "Gestão da reserva de emergência: aportes/retiradas e acompanhamento do objetivo de segurança.",
+      "Você acompanha sua reserva de segurança: quanto já guardou e quanto falta.",
   },
   "/investments": {
     title: "Investimentos",
     description:
-      "Cadastro de investimentos/carteiras e registro de aportes, retiradas e rendimentos.",
+      "Você acompanha quanto colocou, quanto vale hoje e o que rendeu.",
   },
   "/life-cost": {
     title: "Horas de Vida",
     description:
-      "Tradução de gastos em horas/dias de trabalho para entender o impacto real das despesas.",
+      "Você entende seus gastos em horas da sua vida, para decidir com mais clareza.",
   },
   "/analytics": {
     title: "Gráficos",
     description:
-      "Visualização de dados (períodos, categorias, receita vs despesa) para identificar padrões.",
+      "Você enxerga tendências e comparações para tomar decisões melhores.",
   },
   "/shared": {
     title: "Compartilhamento",
     description:
-      "Área para compartilhar informações com outras pessoas quando o recurso estiver ativo.",
+      "Você compartilha informações com outras pessoas quando quiser.",
   },
   "/settings": {
     title: "Configurações",
     description:
-      "Preferências do app: moeda, limites, metas, conta e opções gerais.",
+      "Você ajusta suas preferências e define quanto vale uma hora da sua vida.",
   },
 }
-

@@ -14,5 +14,6 @@ export function useUpcomingTransactions(params: UpcomingTransactionsParams = {})
     queryKey: [...UPCOMING_TRANSACTIONS_KEY, key],
     queryFn: () => transactionsService.getUpcomingTransactions(params),
     retry: false,
+    placeholderData: (prev) => prev,
   })
 }
