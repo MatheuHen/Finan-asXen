@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,10 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const { mutate: login, isPending, error } = useLogin();
+  const searchParams = useSearchParams();
+  const nextParam = searchParams.get("next");
+  const safeNext =
+    nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
 
   const {
     register,
@@ -32,7 +37,7 @@ export default function LoginPage() {
     login(data, {
       onSuccess: () => {
         // Redireciona de forma absoluta forçando o navegador a carregar o layout completo
-        window.location.href = "/";
+        window.location.href = safeNext;
       },
     });
   };

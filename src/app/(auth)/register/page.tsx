@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,10 @@ type RegisterForm = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const { mutate: registerUser, isPending, error } = useRegister();
+  const searchParams = useSearchParams();
+  const nextParam = searchParams.get("next");
+  const safeNext =
+    nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
 
   const {
     register,
@@ -40,7 +45,7 @@ export default function RegisterPage() {
       { email: data.email, password: data.password, name: data.name },
       {
         onSuccess: () => {
-          window.location.href = "/";
+          window.location.href = safeNext;
         },
       }
     );
